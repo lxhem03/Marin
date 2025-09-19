@@ -13,10 +13,10 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Hardcoded configuration (replace with your values)
-API_ID = 'YOUR_TELEGRAM_API_ID'  # Get from https://my.telegram.org
-API_HASH = 'YOUR_TELEGRAM_API_HASH'  # Get from https://my.telegram.org
-BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'  # Get from @BotFather
-API_BASE_URL = 'https://adultcolony.site/xhamster/search'
+API_ID = '27394279'  # Get from https://my.telegram.org
+API_HASH = '90a9aa4c31afa3750da5fd686c410851'  # Get from https://my.telegram.org
+BOT_TOKEN = '7567477886:AAEbL5Smfy69KUN2lX38Wp5FIZ-sggC5JSE'  # Get from @BotFather
+API_BASE_URL = 'https://adultcolony.site/pornhub/search'
 
 # Initialize Pyrogram client
 app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
