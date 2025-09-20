@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 # Hardcoded configuration (replace with your values)
 API_ID = '27394279'  # Get from https://my.telegram.org
 API_HASH = '90a9aa4c31afa3750da5fd686c410851'  # Get from https://my.telegram.org
-BOT_TOKEN = ''  # Get from @BotFather
-MONGODB_URL = ''  # Replace with your MongoDB Atlas URL
-API_BASE_URL = ''
+BOT_TOKEN = '7567477886:AAEbL5Smfy69KUN2lX38Wp5FIZ-sggC5JSE'  # Get from @BotFather
+MONGODB_URL = 'mongodb+srv://python21java:8ZFGYMKJCqAPwsiO@filestore.f876hjv.mongodb.net/?retryWrites=true&w=majority&appName=Filestore'  # Replace with your MongoDB Atlas URL
+API_BASE_URL = 'https://adultcolony.site/pornhub/search'
 
 # Initialize Pyrogram client with Motor storage
 app = Client(
