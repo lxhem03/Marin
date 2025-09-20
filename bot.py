@@ -7,19 +7,66 @@ from urllib.parse import quote
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
+from motor.motor_asyncio import AsyncIOMotorClient
 
 # Set up logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Hardcoded configuration (replace with your values)
 API_ID = '27394279'  # Get from https://my.telegram.org
 API_HASH = '90a9aa4c31afa3750da5fd686c410851'  # Get from https://my.telegram.org
-BOT_TOKEN = '7567477886:AAEbL5Smfy69KUN2lX38Wp5FIZ-sggC5JSE'  # Get from @BotFather
-API_BASE_URL = 'https://adultcolony.site/pornhub/search'
+BOT_TOKEN = ''  # Get from @BotFather
+MONGODB_URL = ''  # Replace with your MongoDB Atlas URL
+API_BASE_URL = ''
 
-# Initialize Pyrogram client
-app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+# Initialize Pyrogram client with Motor storage
+app = Client(
+    "my_bot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN,
+    plugins=dict(root="pyrogram.storage"),
+    in_memory=False
+)
+
+# Set up MongoDB client
+mongo_client = AsyncIOMotorClient(MONGODB_URL)
+db = mongo_client['telegram_sessions']  # Database name
+session_collection = db['sessions']  # Collection for sessions
+
+# Custom storage class for Motor
+class MotorStorage:
+    def __init__(self, collection):
+        self.collection = collection
+
+    async def open(self):
+        logger.info("Opening Motor storage")
+        # No need to create a connection here; handled by motor_client
+
+    async def save(self, data):
+        logger.info("Saving session data")
+        await self.collection.update_one(
+            {'_id': 'session'},
+            {'$set': data},
+            upsert=True
+        )
+
+    async def retrieve(self):
+        logger.info("Retrieving session data")
+        doc = await self.collection.find_one({'_id': 'session'})
+        return doc.get('data', {}) if doc else {}
+
+    async def delete(self):
+        logger.info("Deleting session data")
+        await self.collection.delete_one({'_id': 'session'})
+
+    async def close(self):
+        logger.info("Closing Motor storage")
+        # No explicit close needed for MongoDB
+
+# Set custom storage for Pyrogram
+app.storage = MotorStorage(session_collection)
 
 # Conversation states (simulated with user data)
 SHOW_RESULT, SELECT_QUALITY = range(2)
@@ -32,6 +79,7 @@ FILE_SIZE_LIMIT_MB = 2000
 
 # Function to fetch API results for a page
 def fetch_api_page(query, page):
+    logger.info(f"Fetching API page {page} for query: {query}")
     try:
         encoded_query = quote(query.replace(' ', '%20'))
         url = f"{API_BASE_URL}?query={encoded_query}&page={page}"
@@ -39,7 +87,9 @@ def fetch_api_page(query, page):
         response.raise_for_status()
         data = response.json()
         if data.get('success') and 'data' in data:
+            logger.info(f"API returned {len(data['data'])} results")
             return data['data']
+        logger.warning("API success but no data")
         return []
     except Exception as e:
         logger.error(f"API error on page {page}: {e}")
@@ -47,6 +97,7 @@ def fetch_api_page(query, page):
 
 # Function to get video metadata using ffprobe
 def get_video_metadata(file_path):
+    logger.info(f"Getting metadata for file: {file_path}")
     try:
         probe = subprocess.check_output([
             'ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of',
@@ -54,6 +105,7 @@ def get_video_metadata(file_path):
         ], stderr=subprocess.STDOUT, text=True).strip()
         duration = float(probe) if probe else 0
         file_size = os.path.getsize(file_path) / (1024 * 1024)  # MB
+        logger.info(f"Metadata - Duration: {duration}s, File size: {file_size} MB")
         return duration, file_size
     except Exception as e:
         logger.error(f"Metadata error: {e}")
@@ -62,13 +114,16 @@ def get_video_metadata(file_path):
 # Start command handler
 @app.on_message(filters.command("start"))
 async def start(client, message: Message):
+    logger.info(f"Start command received from {message.chat.id}")
     await message.reply_text("Welcome! Use /search <query> (e.g., /search latest news).")
 
 # Search command handler
 @app.on_message(filters.command("search"))
 async def search(client, message: Message):
+    logger.info(f"Search command received from {message.chat.id} with query: {message.text}")
     query = ' '.join(message.command[1:])  # Extract query after /search
     if not query:
+        logger.warning("No query provided for /search")
         await message.reply_text("Please provide a query, e.g., /search latest news")
         return
 
@@ -83,6 +138,7 @@ async def search(client, message: Message):
 
     new_results = fetch_api_page(query, 1)
     if not new_results:
+        logger.error("No results from API")
         await message.reply_text("No results found or API error.")
         return
 
@@ -91,9 +147,11 @@ async def search(client, message: Message):
 
 # Function to show a specific result
 async def show_result(client, message: Message, index):
+    logger.info(f"Showing result at index {index} for chat {message.chat.id}")
     user_data = message.chat.id
     results = (await client.get_user_data(user_data))['results']
     if index < 0 or index >= len(results):
+        logger.warning(f"Index {index} out of range for {len(results)} results")
         return
 
     item = results[index]
@@ -126,6 +184,7 @@ async def show_result(client, message: Message, index):
 
     # Send or edit message with photo
     if hasattr(message, 'message_id'):
+        logger.info(f"Editing message {message.message_id}")
         await client.edit_message_media(
             chat_id=message.chat.id,
             message_id=message.message_id,
@@ -139,6 +198,7 @@ async def show_result(client, message: Message, index):
             parse_mode='HTML'
         )
     else:
+        logger.info("Sending new message with photo")
         sent_message = await message.reply_photo(
             photo=thumbnail,
             caption=caption,
@@ -150,6 +210,7 @@ async def show_result(client, message: Message, index):
 # Callback query handler
 @app.on_callback_query()
 async def button_handler(client, callback_query):
+    logger.info(f"Callback query received: {callback_query.data} from {callback_query.message.chat.id}")
     data = callback_query.data
     user_data = callback_query.message.chat.id
     current_index = (await client.get_user_data(user_data))['current_index']
@@ -158,37 +219,43 @@ async def button_handler(client, callback_query):
     if data.startswith('prev_'):
         new_index = int(data.split('_')[1]) - 1
         if new_index >= 0:
+            logger.info(f"Navigating to previous index {new_index}")
             await client.set_user_data(user_data, {'current_index': new_index})
             await show_result(client, callback_query.message, new_index)
 
     elif data.startswith('next_'):
         new_index = int(data.split('_')[1]) + 1
         if new_index >= len(results):
+            logger.info("Fetching next page")
             current_page = (await client.get_user_data(user_data))['current_page'] + 1
             new_results = fetch_api_page((await client.get_user_data(user_data))['query'], current_page)
             if new_results:
                 results.extend(new_results)
                 await client.set_user_data(user_data, {'results': results, 'current_page': current_page})
             else:
+                logger.warning("No more results from API")
                 await callback_query.message.reply_text("No more results.")
                 return
 
+        logger.info(f"Navigating to next index {new_index}")
         await client.set_user_data(user_data, {'current_index': new_index})
         await show_result(client, callback_query.message, new_index)
 
     elif data.startswith('download_'):
         index = int(data.split('_')[1])
+        logger.info(f"Download selected for index {index}")
         await client.set_user_data(user_data, {'selected_index': index})
 
         keyboard = [[InlineKeyboardButton(q, callback_data=f"quality_{q}")] for q in QUALITIES]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await callback_query.message.reply_text("Select the quality:", reply_markup=reply_markup)
+        await callback_query.message.reply_text("Select the quality:", reply_markup)
 
     await callback_query.answer()
 
 # Handle quality selection
 @app.on_callback_query(filters.regex(r'^quality_'))
 async def select_quality(client, callback_query):
+    logger.info(f"Quality selection received: {callback_query.data} from {callback_query.message.chat.id}")
     data = callback_query.data
     user_data = callback_query.message.chat.id
     quality = data.split('_')[1]
@@ -202,6 +269,7 @@ async def select_quality(client, callback_query):
     await callback_query.message.reply_text(f"Downloading '{title}' in {quality}...")
 
     try:
+        logger.info(f"Starting download of {video_url}")
         with tempfile.TemporaryDirectory() as tmpdir:
             output_file = os.path.join(tmpdir, f"{title[:50]}.%(ext)s")
             ydl_opts = {
@@ -220,11 +288,13 @@ async def select_quality(client, callback_query):
             duration, file_size_mb = get_video_metadata(file_path)
 
             if file_size_mb > FILE_SIZE_LIMIT_MB:
+                logger.error(f"File too large: {file_size_mb} MB")
                 await callback_query.message.reply_text(f"Error: File too large ({file_size_mb:.2f} MB > {FILE_SIZE_LIMIT_MB} MB).")
                 return
 
             thumb = None
             if thumbnail_url:
+                logger.info("Downloading thumbnail")
                 thumb_response = requests.get(thumbnail_url)
                 if thumb_response.status_code == 200:
                     thumb = InputFile(BytesIO(thumb_response.content), filename='thumb.jpg')
@@ -235,6 +305,7 @@ async def select_quality(client, callback_query):
 
             caption = f"<b>{title}</b>\nDuration: {formatted_duration}\nQuality: {quality}\nFile size: {file_size_mb:.2f} MB"
 
+            logger.info(f"Uploading video, size: {file_size_mb} MB")
             with open(file_path, 'rb') as f:
                 await callback_query.message.reply_video(
                     video=f,
@@ -243,11 +314,13 @@ async def select_quality(client, callback_query):
                     thumb=thumb,
                     supports_streaming=True
                 )
+            logger.info("Upload completed")
 
     except Exception as e:
         logger.error(f"Download/upload error: {e}")
         await callback_query.message.reply_text(f"Error: {str(e)}")
 
 # Run the bot
-if __name__ == '__main__':
+if __name__ == "__main__":
+    logger.info("Starting bot with polling...")
     app.run()
