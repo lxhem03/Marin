@@ -7,10 +7,6 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Log versions for debugging
-logger.info(f"PyMongo version: {pymongo.__version__}")
-logger.info(f"Motor version: {motor.__version__}")
-
 # Hardcoded configuration (replace with your values)
 API_ID = '27394279'  # Get from https://my.telegram.org
 API_HASH = '90a9aa4c31afa3750da5fd686c410851'  # Get from https://my.telegram.org
