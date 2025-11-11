@@ -2,6 +2,7 @@ FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y \
     espeak-ng \
+    gcc \
     libespeak1 \
     espeak-data \
     && rm -rf /var/lib/apt/lists/*
