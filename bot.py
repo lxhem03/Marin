@@ -1,35 +1,53 @@
-import logging
+import asyncio
 import os
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+import pyttsx3
+import io
+from pyrogram.types import Message
+import tempfile
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Load from environment variables (set in deployment platforms)
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Hardcoded configuration (replace with your values)
-API_ID = '27394279'  # Get from https://my.telegram.org
-API_HASH = '90a9aa4c31afa3750da5fd686c410851'  # Get from https://my.telegram.org
-BOT_TOKEN = ''  # Get from @BotFather
+app = Client("tts_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Initialize Pyrogram client with Motor storage
-app = Client(
-    "my_bot",
-    api_id=API_ID,
-    api_hash=API_HASH,
-    bot_token=BOT_TOKEN
-)
+# Initialize TTS engine
+engine = pyttsx3.init()
+voices = engine.getProperty('voices')
 
+# Set default voice (e.g., female if available; adjust index after testing)
+if voices:
+    # Try to pick a female voice (common on Ubuntu: index 0 is often male, 1 female)
+    engine.setProperty('voice', voices[1].id if len(voices) > 1 else voices[0].id)
+    engine.setProperty('rate', 150)  # Speed
+    engine.setProperty('volume', 0.9)  # Volume
 
+@app.on_message(filters.text & filters.private)
+async def tts_handler(client: Client, message: Message):
+    text = message.text
+    if text.lower() == "/start":
+        await message.reply("Send me text, and I'll convert it to speech! Use /voices to list available voices.")
+        return
+    if text.lower() == "/voices":
+        voice_list = "\n".join([f"{i}: {v.name} ({v.languages})" for i, v in enumerate(voices)])
+        await message.reply(f"Available voices:\n{voice_list}")
+        return
 
-# Start command handler
-@app.on_message(filters.command("start"))
-async def start(client, message: Message):
-    logger.info(f"Start command received from {message.chat.id}")
-    await message.reply_text("Welcome! Use /channels ")
+    try:
+        # Use temp file to avoid conflicts
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp:
+            filename = tmp.name
+        engine.save_to_file(text, filename)
+        engine.runAndWait()
 
+        # Send audio
+        await message.reply_audio(filename, title="TTS Audio")
 
-# Run the bot
+        os.unlink(filename)
+    except Exception as e:
+        await message.reply(f"Error generating speech: {str(e)}")
+
 if __name__ == "__main__":
-    logger.info("Starting bot...")
     app.run()
