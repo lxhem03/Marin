@@ -1,8 +1,8 @@
-pyrogram
 Flask
 gunicorn
 Jinja2
 werkzeug
 itsdangerous
-tgcrypto
-
+pyrogram==2.0.106
+tgcrypto==1.2.5
+pyttsx3==2.91
