@@ -123,8 +123,7 @@ async def post_latest_news():
                     chat_id=CHANNEL_ID,
                     photo=item["poster"],
                     caption=caption,
-                    parse_mode=ParseMode.HTML,
-                    disable_web_page_preview=False
+                    parse_mode=ParseMode.HTML
                 )
                 posted_titles.add(item["title"])
                 save_posted_titles(posted_titles)
