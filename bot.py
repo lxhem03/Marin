@@ -1,8 +1,10 @@
 import asyncio
 import requests
 from pyrogram import Client
+from pyrogram.enums import ParseMode
 import os
 import logging
+import json
 
 # ---------------------
 # Logging setup
@@ -24,6 +26,21 @@ TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 app = Client("movie_news_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # ---------------------
+# Persistent file for posted titles
+# ---------------------
+POSTED_FILE = "posted.json"
+
+def load_posted_titles():
+    if os.path.exists(POSTED_FILE):
+        with open(POSTED_FILE, "r") as f:
+            return set(json.load(f))
+    return set()
+
+def save_posted_titles(titles):
+    with open(POSTED_FILE, "w") as f:
+        json.dump(list(titles), f)
+
+# ---------------------
 # TMDb Fetch Function
 # ---------------------
 def get_latest_movies_and_series():
@@ -39,23 +56,23 @@ def get_latest_movies_and_series():
 
         combined = []
 
-        for movie in trending_movies.get("results", [])[:3]:
+        for movie in trending_movies.get("results", []):
             combined.append({
                 "type": "Movie",
                 "title": movie["title"],
                 "overview": movie["overview"],
                 "release": movie.get("release_date", "Unknown"),
-                "poster": f"https://image.tmdb.org/t/p/w780{movie['backdrop_path'] or movie['poster_path']}",
+                "poster": f"https://image.tmdb.org/t/p/w780{movie.get('backdrop_path') or movie.get('poster_path')}",
                 "url": f"https://www.themoviedb.org/movie/{movie['id']}"
             })
 
-        for tv in trending_tv.get("results", [])[:3]:
+        for tv in trending_tv.get("results", []):
             combined.append({
                 "type": "Series",
                 "title": tv["name"],
                 "overview": tv["overview"],
                 "release": tv.get("first_air_date", "Unknown"),
-                "poster": f"https://image.tmdb.org/t/p/w780{tv['backdrop_path'] or tv['poster_path']}",
+                "poster": f"https://image.tmdb.org/t/p/w780{tv.get('backdrop_path') or tv.get('poster_path')}",
                 "url": f"https://www.themoviedb.org/tv/{tv['id']}"
             })
 
@@ -69,8 +86,18 @@ def get_latest_movies_and_series():
 # Auto Post Function
 # ---------------------
 async def post_latest_news():
-    """Posts latest movie/series news periodically"""
-    posted_titles = set()
+    """Posts only new movie/series updates periodically"""
+    posted_titles = load_posted_titles()
+    logging.info(f"Loaded {len(posted_titles)} previously posted titles.")
+
+    # verify channel access
+    try:
+        me = await app.get_me()
+        chat = await app.get_chat(CHANNEL_ID)
+        logging.info(f"Connected as {me.username}, posting to {chat.title}")
+    except Exception as e:
+        logging.error(f"Failed to access channel {CHANNEL_ID}: {e}")
+        return
 
     while True:
         items = get_latest_movies_and_series()
@@ -79,15 +106,16 @@ async def post_latest_news():
             await asyncio.sleep(3600)
             continue
 
+        new_posts = 0
         for item in items:
             if item["title"] in posted_titles:
                 continue
 
             caption = (
-                f"🎬 **{item['title']}** ({item['type']})\n"
-                f"📅 Release: {item['release']}\n\n"
-                f"📰 {item['overview'][:500]}...\n\n"
-                f"🔗 [View on TMDb]({item['url']})"
+                f"🎬 <b>{item['title']}</b> ({item['type']})\n"
+                f"📅 Release: <i>{item['release']}</i>\n\n"
+                f"📰 {item['overview'][:600]}...\n\n"
+                f"🔗 <a href='{item['url']}'>View on TMDb</a>"
             )
 
             try:
@@ -95,21 +123,33 @@ async def post_latest_news():
                     chat_id=CHANNEL_ID,
                     photo=item["poster"],
                     caption=caption,
-                    parse_mode="markdown"
+                    parse_mode=ParseMode.HTML,
+                    disable_web_page_preview=False
                 )
-                logging.info(f"Posted: {item['title']}")
                 posted_titles.add(item["title"])
+                save_posted_titles(posted_titles)
+                new_posts += 1
+                logging.info(f"✅ Posted: {item['title']}")
                 await asyncio.sleep(10)
             except Exception as e:
-                logging.error(f"Failed to post {item['title']}: {e}")
+                logging.error(f"❌ Failed to post {item['title']}: {e}")
 
-        await asyncio.sleep(1 * 60)
+        if new_posts == 0:
+            logging.info("No new items found to post.")
 
+        await asyncio.sleep(1 * 60)  # Every 6 hours
+
+# ---------------------
+# /start handler (optional)
+# ---------------------
 @app.on_message()
 async def start(client, message):
-    await message.reply("🎥 This bot automatically posts latest movie and series updates to the channel!")
+    await message.reply("🎥 This bot automatically posts the latest movie & series news to the channel!")
 
+# ---------------------
+# Run
+# ---------------------
 if __name__ == "__main__":
-    logging.info("Starting Movie News Bot...")
+    logging.info("🚀 Starting Movie News Bot...")
     app.start()
     asyncio.get_event_loop().run_until_complete(post_latest_news())
