@@ -4,7 +4,7 @@ Jinja2
 werkzeug
 itsdangerous
 tgcrypto
-pyrogram
+pyrofork
 requests
 tgcrypto
 asyncio
