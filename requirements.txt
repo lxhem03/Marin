@@ -1,8 +1,11 @@
-pyrogram
 Flask
 gunicorn
 Jinja2
 werkzeug
 itsdangerous
 tgcrypto
+pyrogram
+requests
+tgcrypto
+asyncio
 
