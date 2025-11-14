@@ -11,43 +11,28 @@ from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 
-# -------------------------
-# Logging
-# -------------------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# -------------------------
-# Environment variables
-# -------------------------
 API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-CHANNEL_ID = os.environ.get("CHANNEL_ID", "")  # e.g. @yourchannel
+CHANNEL_ID = os.environ.get("CHANNEL_ID", "")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 
-# Admin IDs env: comma separated integers
 ADMINS = os.environ.get("ADMINS", "")
 ADMINS = [int(x.strip()) for x in ADMINS.split(",") if x.strip().isdigit()]
 
-# persistence files
 POSTED_FILE = "posted.json"
 STATE_FILE = "state.json"
 SEARCH_CACHE_FILE = "search_cache.json"
 
-# runtime settings
-CHECK_INTERVAL = 120  # seconds (1 hour)
-POST_DELAY = 10  # seconds between posting new items (per your request)
+CHECK_INTERVAL = 360 
+POST_DELAY = 20
 PAGE_SIZE = 10
 MAX_SEARCH_RESULTS = 100
 
-# -------------------------
-# Pyrogram client
-# -------------------------
-app = Client("movie_news_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app = Client("tmdb_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# -------------------------
-# Utilities for JSON persistence
-# -------------------------
 def load_json_file(path: str, default):
     try:
         if os.path.exists(path):
@@ -68,7 +53,7 @@ posted_titles = set(load_json_file(POSTED_FILE, []))
 state = load_json_file(STATE_FILE, {"paused": False})
 PAUSED = bool(state.get("paused", False))
 
-# search cache: {search_id: [ {id,type,title,year,rating}, ... ] }
+
 search_cache = load_json_file(SEARCH_CACHE_FILE, {})
 
 def persist_posted():
@@ -79,7 +64,6 @@ def persist_state():
     save_json_file(STATE_FILE, state)
 
 def persist_search_cache():
-    # keep cache small: trim entries older than some threshold or limit size (simple approach here)
     save_json_file(SEARCH_CACHE_FILE, search_cache)
 
 def add_posted(title: str):
@@ -91,9 +75,6 @@ def set_paused(flag: bool):
     PAUSED = bool(flag)
     persist_state()
 
-# -------------------------
-# TMDb helpers
-# -------------------------
 TMDB_BASE = "https://api.themoviedb.org/3"
 
 def tmdb_request(path: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -162,13 +143,11 @@ def get_trending_all_day() -> List[Dict[str, Any]]:
 def get_details(media_type: str, media_id: int) -> Dict[str, Any]:
     d = tmdb_request(f"{media_type}/{media_id}")
     genres = ", ".join(g.get("name") for g in d.get("genres", [])) or "Unknown"
-    # runtime
     if media_type == "movie":
         runtime = d.get("runtime") or "Unknown"
     else:
         ep_run = d.get("episode_run_time") or []
         runtime = f"{ep_run[0]} min" if ep_run else "Unknown"
-    # main production company (first)
     companies = d.get("production_companies", []) or []
     main_company = companies[0].get("name") if companies else None
     return {
@@ -186,9 +165,6 @@ def get_details(media_type: str, media_id: int) -> Dict[str, Any]:
         "poster_path": d.get("poster_path") or d.get("backdrop_path")
     }
 
-# -------------------------
-# Caption builders & post formatting
-# -------------------------
 def build_post_caption(item: Dict[str, Any], extra: Dict[str, Any]) -> str:
     imdb_link = f"<a href='https://www.imdb.com/title/{extra.get('imdb')}'>IMDb</a> | " if extra.get("imdb") else ""
     return (
@@ -201,9 +177,6 @@ def build_post_caption(item: Dict[str, Any], extra: Dict[str, Any]) -> str:
         f"🔗 {imdb_link}<a href='{item['url']}'>TMDb</a>"
     )
 
-# -------------------------
-# Posting loop (respects PAUSED)
-# -------------------------
 async def post_weekly_summary():
     weekly = tmdb_request("trending/all/week").get("results", [])[:10]
     if not weekly:
@@ -228,7 +201,6 @@ async def post_new_items_once():
         return
 
     for item in new_items:
-        # respect pause every iteration
         if PAUSED:
             logging.info("Posting paused; halting posting loop.")
             return
@@ -236,7 +208,6 @@ async def post_new_items_once():
         extra = get_details(item["type"], item["id"])
         caption = build_post_caption(item, extra)
         try:
-            # send poster image if available, else send message only
             poster = item.get("poster") or (build_image_url(extra.get("poster_path")) if extra.get("poster_path") else None)
             if poster:
                 await app.send_photo(CHANNEL_ID, poster, caption=caption, parse_mode=ParseMode.HTML)
@@ -246,7 +217,6 @@ async def post_new_items_once():
             logging.info(f"Posted: {item['title']}")
         except Exception as e:
             logging.error(f"Failed to post {item.get('title')}: {e}")
-        # delay between posts
         await asyncio.sleep(POST_DELAY)
 
 async def auto_loop():
@@ -254,7 +224,6 @@ async def auto_loop():
     while True:
         now = datetime.utcnow()
         try:
-            # Weekly Sunday 09:00 UTC
             if now.weekday() == 6 and now.hour == 9:
                 logging.info("Posting weekly summary (auto).")
                 if not PAUSED:
@@ -272,9 +241,7 @@ async def auto_loop():
 
         await asyncio.sleep(CHECK_INTERVAL)
 
-# -------------------------
-# Admin helper
-# -------------------------
+
 def is_admin(user_id: int) -> bool:
     return user_id in ADMINS
 
@@ -288,9 +255,6 @@ def admin_only(func):
         await func(client, message)
     return wrapper
 
-# -------------------------
-# /start handlers
-# -------------------------
 @app.on_message(filters.command("start") & filters.private)
 async def start_private(_, msg):
     await msg.reply(
@@ -299,7 +263,7 @@ async def start_private(_, msg):
         "Commands:\n"
         "• <b>/search Movie or Series Name</b> — (private) search & get full details (paginated)\n"
         "• <b>/poster Name</b> — (pm & groups) find posters/backdrops (paginated)\n\n"
-        "Admins: /pause /resume /weekly /checknew /status\n\nEnjoy! 🍿",
+        "Enjoy! 🍿",
         parse_mode=ParseMode.HTML
     )
 
@@ -307,9 +271,6 @@ async def start_private(_, msg):
 async def start_group(_, msg):
     await msg.reply("🎬 Use /poster <name> here, or message me privately for /search.", parse_mode=ParseMode.HTML)
 
-# -------------------------
-# Search command (PM only) with pagination + cached search_id
-# -------------------------
 def chunk_list(lst: List, size: int) -> List[List]:
     return [lst[i:i+size] for i in range(0, len(lst), size)]
 
@@ -330,7 +291,6 @@ def build_results_keyboard_from_cache(results: List[Dict[str, Any]], search_id: 
         nav_buttons.append(InlineKeyboardButton("NEXT ➡️", callback_data=f"s_pg|{search_id}|{page+1}"))
     if nav_buttons:
         buttons.append(nav_buttons)
-    # Add TMDB or IMDB buttons not needed here — they appear after user selects a result
     return InlineKeyboardMarkup(buttons)
 
 @app.on_message(filters.command("search") & filters.private)
@@ -345,7 +305,6 @@ async def search_cmd(_, msg):
         await msg.reply(f"❌ No results found for <b>{query}</b>.", parse_mode=ParseMode.HTML)
         return
 
-    # create a search_id and cache results
     search_id = uuid.uuid4().hex[:32]
     search_cache[search_id] = normalized
     persist_search_cache()
@@ -355,12 +314,8 @@ async def search_cmd(_, msg):
     header = f"🔍 <b>Results for:</b> <i>{query}</i>\n📄 <b>Page {page+1} / {((len(normalized)-1)//PAGE_SIZE)+1}</b>"
     await msg.reply(header, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
-# -------------------------
-# /poster command (PM & groups) - behaves similarly with caching for pagination
-# -------------------------
+
 def build_results_keyboard_for_poster(results: List[Dict[str, Any]], search_id: str, page: int) -> InlineKeyboardMarkup:
-    # reuse same format but label includes type & rating as you chose earlier? You selected Q1=A (Title (Year) header style),
-    # but earlier asked title buttons to include rating/type in prior conversation; we'll show Title (Year) here to keep clean.
     pages = chunk_list(results, PAGE_SIZE)
     total_pages = len(pages)
     page = max(0, min(page, total_pages - 1))
@@ -400,14 +355,10 @@ async def poster_cmd(_, msg):
     header = f"🔍 <b>Results for:</b> <i>{query}</i>\n📄 <b>Page {page+1} / {((len(normalized)-1)//PAGE_SIZE)+1}</b>"
     await msg.reply(header, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
-# -------------------------
-# Callback handler (pagination & selection) for both search & poster
-# -------------------------
 @app.on_callback_query()
 async def callback_router(client: Client, cq: CallbackQuery):
     data = cq.data or ""
     try:
-        # Search pagination: s_pg|searchid|page
         if data.startswith("s_pg|"):
             _, search_id, page_str = data.split("|", 2)
             page = int(page_str)
@@ -421,16 +372,13 @@ async def callback_router(client: Client, cq: CallbackQuery):
             await cq.message.edit_text(header, reply_markup=keyboard, parse_mode=ParseMode.HTML)
             await cq.answer()
             return
-
-        # Search selection: s_sel|searchid|type|id
+            
         if data.startswith("s_sel|"):
             _, search_id, mtype, mid = data.split("|", 3)
             results = search_cache.get(search_id)
             if not results:
                 await cq.answer("Search expired. Please run the search again.", show_alert=True)
                 return
-            # find item info (optional)
-            # edit message to show finding...
             await cq.message.edit_text("⏳ Fetching details, please wait...", parse_mode=ParseMode.HTML)
             await cq.answer()
             mid_int = int(mid)
@@ -444,7 +392,6 @@ async def callback_router(client: Client, cq: CallbackQuery):
             poster_path = details.get("poster_path")
             poster_url = build_image_url(poster_path) if poster_path else None
 
-            # build detailed message per your Q2=A preference (but limited: main studio only, no producers, no networks)
             lines = []
             lines.append(f"🎬 <b>{title or 'Title'}</b>")
             if mtype == "movie":
@@ -452,7 +399,6 @@ async def callback_router(client: Client, cq: CallbackQuery):
                 lines.append(f"⏳ <b>Duration:</b> {details.get('runtime')}")
             else:
                 lines.append(f"📅 <b>First Air:</b> {d_full.get('first_air_date') or 'Unknown'}")
-                # seasons & episodes
                 if details.get("number_of_seasons") is not None:
                     lines.append(f"📺 <b>Seasons:</b> {details.get('number_of_seasons')}")
                 if details.get("number_of_episodes") is not None:
@@ -465,7 +411,6 @@ async def callback_router(client: Client, cq: CallbackQuery):
             lines.append(f"🌍 <b>Languages:</b> {details.get('spoken_languages')}")
             lines.append("\n📝 <b>Overview:</b>")
             lines.append(details.get("overview") or "No overview available.")
-            # build footer buttons: TMDB & IMDb (if available)
             tmdb_link = f"https://www.themoviedb.org/{mtype}/{mid}"
             imdb_id = details.get("imdb")
             buttons = [InlineKeyboardButton("TMDB", url=tmdb_link)]
@@ -473,10 +418,9 @@ async def callback_router(client: Client, cq: CallbackQuery):
                 buttons.append(InlineKeyboardButton("IMDb", url=f"https://www.imdb.com/title/{imdb_id}"))
             markup = InlineKeyboardMarkup([buttons])
 
-            text = "\n".join(lines)[:3900]  # safety
+            text = "\n".join(lines)[:3900]
             try:
                 if poster_url:
-                    # send poster photo with caption, buttons
                     await cq.message.reply_photo(poster_url, caption=text, parse_mode=ParseMode.HTML, reply_markup=markup)
                 else:
                     await cq.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
