@@ -1,7 +1,4 @@
 #V5
-#!/usr/bin/env python3
-# main.py - Movie/Series TMDb Telegram Bot (final version per your choices)
-
 import os
 import json
 import logging
@@ -10,7 +7,6 @@ import requests
 import uuid
 from datetime import datetime
 from typing import List, Dict, Any
-
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
@@ -39,8 +35,8 @@ STATE_FILE = "state.json"
 SEARCH_CACHE_FILE = "search_cache.json"
 
 # runtime settings
-CHECK_INTERVAL = 3600  # seconds (1 hour)
-POST_DELAY = 5  # seconds between posting new items (per your request)
+CHECK_INTERVAL = 120  # seconds (1 hour)
+POST_DELAY = 10  # seconds between posting new items (per your request)
 PAGE_SIZE = 10
 MAX_SEARCH_RESULTS = 100
 
