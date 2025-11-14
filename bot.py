@@ -61,7 +61,7 @@ def tmdb_get(url):
 def get_detailed_info(media_type, media_id):
     d = tmdb_get(f"{media_type}/{media_id}")
     return {
-        "genres": ", ".join([g["name"]] for g in d.get("genres", [])) or "Unknown",
+        "genres": ", ".join(g["name"] for g in d.get("genres", [])) or "Unknown",
         "rating": d.get("vote_average", 0),
         "votes": d.get("vote_count", 0),
         "runtime": d.get("runtime") or d.get("episode_run_time", ["Unknown"])[0],
