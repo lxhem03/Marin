@@ -1,3 +1,4 @@
+#V1-2
 import os
 import asyncio
 from pyrogram import Client, filters
@@ -33,14 +34,15 @@ async def start_help(_, message: Message):
 
 # -------------------- VIDEO/DOCUMENT HANDLER --------------------
 
-@app.on_message(
-    (filters.video | filters.document) & 
-    ~filters.document.file_name.endswith(".srt")
-)
+@app.on_message(filters.video | filters.document)
 async def file_received(_, message: Message):
     user_id = message.from_user.id
 
-    # Save video/document for later
+    # ---- Ignore SRT files here ----
+    if message.document and message.document.file_name.lower().endswith(".srt"):
+        return  # This will be handled by the SRT handler
+
+    # Save the video/document message
     user_video[user_id] = message
 
     await message.reply(
@@ -50,7 +52,6 @@ async def file_received(_, message: Message):
             [InlineKeyboardButton("🎬 Soft Subtitles", callback_data="soft_sub")]
         ])
     )
-
 
 # -------------------- CALLBACK --------------------
 
@@ -71,17 +72,21 @@ async def callback_handler(_, query):
 
 # -------------------- SUBTITLE FILE HANDLER --------------------
 
-@app.on_message(filters.document & filters.regex(r".*\\.srt$"))
+@app.on_message(filters.document)
 async def srt_received(_, message: Message):
     user_id = message.from_user.id
 
+    # ---- Only accept SRT subtitles here ----
+    if not message.document.file_name.lower().endswith(".srt"):
+        return  # Not an SRT, ignore
+
     if user_id not in user_action or user_id not in user_video:
-        return await message.reply("❗ First send a **video**, then choose Hard/Soft subtitle mode.")
+        return await message.reply("❗ First send a video, then choose Hard/Soft Subtitles.")
 
     mode = user_action[user_id]
     video_msg = user_video[user_id]
 
-    await message.reply("⬇️ Downloading files, please wait...")
+    await message.reply("⬇️ Downloading files...")
 
     # Download both
     video_path = await video_msg.download()
@@ -89,6 +94,7 @@ async def srt_received(_, message: Message):
 
     output_file = video_path.rsplit('.', 1)[0] + "_subbed.mp4"
 
+    # FFmpeg command
     if mode == "hard":
         cmd = f"ffmpeg -i '{video_path}' -vf subtitles='{srt_path}' -c:a copy '{output_file}' -y"
     else:
@@ -104,8 +110,10 @@ async def srt_received(_, message: Message):
     os.remove(srt_path)
     os.remove(output_file)
 
+    # Reset user session
     user_action.pop(user_id, None)
     user_video.pop(user_id, None)
+
 
 # -------------------- RUN BOT --------------------
 
