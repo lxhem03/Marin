@@ -8,4 +8,5 @@ pyrofork
 requests
 tgcrypto
 asyncio
+ffmpeg-python
 
