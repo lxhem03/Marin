@@ -33,11 +33,15 @@ async def start_help(_, message: Message):
 
 # -------------------- VIDEO/DOCUMENT HANDLER --------------------
 
-@app.on_message(filters.video | filters.document)
+@app.on_message(
+    (filters.video | filters.document) & 
+    ~filters.document.file_name.endswith(".srt")
+)
 async def file_received(_, message: Message):
     user_id = message.from_user.id
 
-    user_video[user_id] = message  # store video/document message
+    # Save video/document for later
+    user_video[user_id] = message
 
     await message.reply(
         "Choose what to do with the file:",
@@ -72,30 +76,28 @@ async def srt_received(_, message: Message):
     user_id = message.from_user.id
 
     if user_id not in user_action or user_id not in user_video:
-        return await message.reply("❗ First send a video, then choose Hard/Soft Subtitles.")
+        return await message.reply("❗ First send a **video**, then choose Hard/Soft subtitle mode.")
 
     mode = user_action[user_id]
     video_msg = user_video[user_id]
 
     await message.reply("⬇️ Downloading files, please wait...")
 
-    # Download video + srt
+    # Download both
     video_path = await video_msg.download()
     srt_path = await message.download()
 
     output_file = video_path.rsplit('.', 1)[0] + "_subbed.mp4"
 
-    # FFmpeg commands
     if mode == "hard":
         cmd = f"ffmpeg -i '{video_path}' -vf subtitles='{srt_path}' -c:a copy '{output_file}' -y"
     else:
         cmd = f"ffmpeg -i '{video_path}' -i '{srt_path}' -c copy -c:s mov_text '{output_file}' -y"
 
-    # Process using FFmpeg
     process = await asyncio.create_subprocess_shell(cmd)
     await process.communicate()
 
-    await message.reply_video(output_file, caption="✅ Here is your processed file.")
+    await message.reply_video(output_file, caption="✅ Your processed file is ready!")
 
     # Cleanup
     os.remove(video_path)
@@ -104,7 +106,6 @@ async def srt_received(_, message: Message):
 
     user_action.pop(user_id, None)
     user_video.pop(user_id, None)
-
 
 # -------------------- RUN BOT --------------------
 
