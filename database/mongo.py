@@ -1,5 +1,5 @@
 from motor.motor_asyncio import AsyncIOMotorClient
-from config import MONGO_URL
+from config import MONGO_URL, DB_NAME
 
-client = AsyncIOMotorClient(MONGO_URL)
-db = client.get_default_database()
+_client = AsyncIOMotorClient(MONGO_URL)
+db = _client[DB_NAME]
