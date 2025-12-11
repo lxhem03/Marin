@@ -1,15 +1,24 @@
-FROM python:3.12-slim
+FROM python:3.10-slim
 
-RUN apt-get update && apt-get install -y \
-    espeak-ng \
+# Install dependencies for FFmpeg
+RUN apt-get update && \
+    apt-get install -y \
     gcc \
-    libespeak1 \
-    espeak-data \
-    && rm -rf /var/lib/apt/lists/*
+    ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
+# Set working directory
 WORKDIR /app
-COPY . /app
 
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["bash", "run.sh"]
+# Copy bot files
+COPY . .
+
+# Run bot
+CMD ["python", "main.py"]
