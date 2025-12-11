@@ -1,16 +1,14 @@
-import os
-import ffmpeg
+import asyncio 
+from collections import defaultdict
 from pyrogram import Client, filters
 from pyrogram.types import Message
-
-# Store pending videos by user
-PENDING = {}
 
 # Load from environment variables (set in deployment platforms)
 API_ID = int(os.getenv("API_ID", "23340285"))
 API_HASH = os.getenv("API_HASH", "ab18f905cb5f4a75d41bb48d20acfa50")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7987512854:AAGsXDfqyAcRT3wRGVFC9_u02ADd7A45z5k")
 
+# Initialize the bot client
 app = Client(
     "thumbchanger",
     api_id=API_ID,
@@ -18,62 +16,50 @@ app = Client(
     bot_token=BOT_TOKEN
 )
 
-# User sends video first
-@app.on_message(filters.private & (filters.video | filters.document))
-async def handle_video(_, message: Message):
+# Dictionary to store pending video file_ids for users (user_id -> video_file_id)
+pending_videos = defaultdict(str)
+
+@app.on_message(filters.video & filters.private)
+async def handle_video(client: Client, message: Message):
+    # Store the video file_id
+    pending_videos[message.from_user.id] = message.video.file_id
+    await message.reply("Video received! Now send me the image to use as the cover (thumbnail).")
+
+@app.on_message(filters.photo & filters.private)
+async def handle_photo(client: Client, message: Message):
     user_id = message.from_user.id
-
-    # Store file object
-    PENDING[user_id] = message
-
-    # Ask for thumbnail instantly (silent mode)
-    await message.reply("Send the thumbnail image now.")
-
-
-# User sends image next
-@app.on_message(filters.private & filters.photo)
-async def handle_thumb(_, message: Message):
-    user_id = message.from_user.id
-
-    if user_id not in PENDING:
-        return await message.reply("Please send a video first.")
-
-    video_msg = PENDING[user_id]
-
-    # Paths
-    video_path = f"video_{user_id}.mp4"
-    image_path = f"thumb_{user_id}.jpg"
-    output_path = f"final_{user_id}.mp4"
-
-    # Silent-fast download of both files
-    await video_msg.download(video_path)
-    await message.download(image_path)
-
-    # ffmpeg: attach thumbnail without re-encoding
-    (
-        ffmpeg
-        .input(video_path)
-        .input(image_path)
-        .output(
-            output_path,
-            map='0',
-            map_='1',
-            c='copy',
-            **{"disposition:v:1": "attached_pic"},
-            **{"metadata:s:v:1": "title=Cover Image"}
-        )
-        .overwrite_output()
-        .run(quiet=True)
+    
+    if user_id not in pending_videos or not pending_videos[user_id]:
+        await message.reply("Please send a video first, then the thumbnail image.")
+        return
+    
+    # Get the pending video file_id
+    video_file_id = pending_videos[user_id]
+    
+    # Use the received photo's file_id as thumb (no download needed, Telegram handles it efficiently)
+    thumb_file_id = message.photo.file_id  # The largest photo size file_id
+    
+    # Send the video back with the new thumbnail
+    # This re-uses the original video file_id, so no re-upload or quality loss for the video
+    # Thumbnail is set directly, preserving its quality as Telegram compresses it minimally for thumbs
+    await client.send_video(
+        chat_id=message.chat.id,
+        video=video_file_id,
+        thumb=thumb_file_id,
+        caption="Here's your video with the new cover!"
     )
+    
+    # Clear the pending video
+    del pending_videos[user_id]
+    
+    await message.reply("Thumbnail applied and video sent! It should have taken just a second or two.")
 
-    # Send back final video
-    await message.reply_video(output_path, caption="Thumbnail replaced!")
+@app.on_message(filters.text & filters.private)
+async def handle_text(client: Client, message: Message):
+    if message.text.lower() == "/start":
+        await message.reply("Hi! Send me a video, and I'll ask for a thumbnail image to set as its cover. I'll send it back quickly without re-encoding the video.")
 
-    # Cleanup
-    os.remove(video_path)
-    os.remove(image_path)
-    os.remove(output_path)
-    PENDING.pop(user_id, None)
-
-
-app.run()
+# Run the bot
+if __name__ == "__main__":
+    print("Starting the thumbnail bot...")
+    app.run()
