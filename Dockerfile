@@ -21,4 +21,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run bot
-CMD ["bash", "run.sh"]
+CMD ["python", "bot.py"]
