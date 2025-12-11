@@ -1,53 +1,79 @@
-import asyncio
 import os
+import ffmpeg
 from pyrogram import Client, filters
-import pyttsx3
-import io
 from pyrogram.types import Message
-import tempfile
+
+# Store pending videos by user
+PENDING = {}
 
 # Load from environment variables (set in deployment platforms)
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-app = Client("tts_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app = Client(
+    "thumbchanger",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN
+)
 
-# Initialize TTS engine
-engine = pyttsx3.init()
-voices = engine.getProperty('voices')
+# User sends video first
+@app.on_message(filters.private & (filters.video | filters.document))
+async def handle_video(_, message: Message):
+    user_id = message.from_user.id
 
-# Set default voice (e.g., female if available; adjust index after testing)
-if voices:
-    # Try to pick a female voice (common on Ubuntu: index 0 is often male, 1 female)
-    engine.setProperty('voice', voices[1].id if len(voices) > 1 else voices[0].id)
-    engine.setProperty('rate', 150)  # Speed
-    engine.setProperty('volume', 0.9)  # Volume
+    # Store file object
+    PENDING[user_id] = message
 
-@app.on_message(filters.text & filters.private)
-async def tts_handler(client: Client, message: Message):
-    text = message.text
-    if text.lower() == "/start":
-        await message.reply("Send me text, and I'll convert it to speech! Use /voices to list available voices.")
-        return
-    if text.lower() == "/voices":
-        voice_list = "\n".join([f"{i}: {v.name} ({v.languages})" for i, v in enumerate(voices)])
-        await message.reply(f"Available voices:\n{voice_list}")
-        return
+    # Ask for thumbnail instantly (silent mode)
+    await message.reply("Send the thumbnail image now.")
 
-    try:
-        # Use temp file to avoid conflicts
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp:
-            filename = tmp.name
-        engine.save_to_file(text, filename)
-        engine.runAndWait()
 
-        # Send audio
-        await message.reply_audio(filename, title="TTS Audio")
+# User sends image next
+@app.on_message(filters.private & filters.photo)
+async def handle_thumb(_, message: Message):
+    user_id = message.from_user.id
 
-        os.unlink(filename)
-    except Exception as e:
-        await message.reply(f"Error generating speech: {str(e)}")
+    if user_id not in PENDING:
+        return await message.reply("Please send a video first.")
 
-if __name__ == "__main__":
-    app.run()
+    video_msg = PENDING[user_id]
+
+    # Paths
+    video_path = f"video_{user_id}.mp4"
+    image_path = f"thumb_{user_id}.jpg"
+    output_path = f"final_{user_id}.mp4"
+
+    # Silent-fast download of both files
+    await video_msg.download(video_path)
+    await message.download(image_path)
+
+    # ffmpeg: attach thumbnail without re-encoding
+    (
+        ffmpeg
+        .input(video_path)
+        .input(image_path)
+        .output(
+            output_path,
+            map='0',
+            map_='1',
+            c='copy',
+            **{"disposition:v:1": "attached_pic"},
+            **{"metadata:s:v:1": "title=Cover Image"}
+        )
+        .overwrite_output()
+        .run(quiet=True)
+    )
+
+    # Send back final video
+    await message.reply_video(output_path, caption="Thumbnail replaced!")
+
+    # Cleanup
+    os.remove(video_path)
+    os.remove(image_path)
+    os.remove(output_path)
+    PENDING.pop(user_id, None)
+
+
+app.run()
