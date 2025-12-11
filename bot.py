@@ -7,9 +7,9 @@ from pyrogram.types import Message
 PENDING = {}
 
 # Load from environment variables (set in deployment platforms)
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+API_ID = int(os.getenv("API_ID", "23340285"))
+API_HASH = os.getenv("API_HASH", "ab18f905cb5f4a75d41bb48d20acfa50")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "7987512854:AAGsXDfqyAcRT3wRGVFC9_u02ADd7A45z5k")
 
 app = Client(
     "thumbchanger",
