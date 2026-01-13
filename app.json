@@ -1,0 +1,5 @@
+{
+  "name": "Demobot",
+  "description": "Telegram Bot (Docker deployment)",
+  "stack": "container"
+}
