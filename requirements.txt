@@ -1,8 +1,8 @@
 pyrogram
+tgcrypto
+yt-dlp
 Flask
 gunicorn
 Jinja2
 werkzeug
 itsdangerous
-tgcrypto
-
