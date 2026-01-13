@@ -5,7 +5,7 @@ import yt_dlp
 
 API_ID = 23340285
 API_HASH = "ab18f905cb5f4a75d41bb48d20acfa50"
-BOT_TOKEN = ""
+BOT_TOKEN = "8503714406:AAGbGAjnk-WLnPMxMP6MwItzUGKgIRi9_bE"
 
 # Available qualities for selection
 QUALITIES = ["144p", "240p", "360p", "480p", "720p", "1080p"]
