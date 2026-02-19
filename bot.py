@@ -118,7 +118,7 @@ async def start_drive_auth(client, message):
         logger.error(f"Error starting auth for user {user_id}: {e}")
         await message.reply(f"Error starting authorization: {str(e)}. Check bot logs or re-upload credentials.")
 
-@app.on_message(filters.text & filters.command())
+@app.on_message(filters.text & ~filters.command())
 async def receive_code(client, message):
     user_id = message.from_user.id
     code = message.text.strip()
