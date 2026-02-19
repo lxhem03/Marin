@@ -1,4 +1,6 @@
 pyrogram
+google-auth-oauthlib==1.2.0
+google-api-python-client==2.116.0
 Flask
 gunicorn
 Jinja2
