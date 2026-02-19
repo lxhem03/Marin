@@ -19,9 +19,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Your bot credentials from my.telegram.org and BotFather
-API_ID = 1234567  # Replace with your API ID
-API_HASH = "your_api_hash_here"  # Replace with your API Hash
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # Replace with your bot token
+API_ID = 23340285  # Replace with your API ID
+API_HASH = "ab18f905cb5f4a75d41bb48d20acfa50"  # Replace with your API Hash
+BOT_TOKEN = "8503714406:AAGbGAjnk-WLnPMxMP6MwItzUGKgIRi9_bE"  # Replace with your bot token
 
 # Google Drive scopes
 SCOPES = ['https://www.googleapis.com/auth/drive']
