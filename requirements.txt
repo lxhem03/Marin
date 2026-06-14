@@ -1,8 +1,2 @@
-pyrogram
-Flask
-gunicorn
-Jinja2
-werkzeug
-itsdangerous
-tgcrypto
-
+pymongo==4.7.3
+dnspython==2.6.1
